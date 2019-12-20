@@ -1,14 +1,16 @@
 ;; Individuals = possible solutions
+extensions [ rnd ] 
 
 breed [AI:individuals AI:individual]
 
 AI:individuals-own [
   content  ; Where the representation of the solution is stored in the individual
   fitness  ; Where the fitness of the individual is stored
-  probabilidad
+  prob
+  rank
 ]
 
-globals[iteraciones]
+globals[iteraciones prueba prueba2 prueba3 prueba4]
 ;---------------------------------------------------------------------------------
 
 ;--------------- Procedures to be customized -------------------------------------
@@ -58,7 +60,7 @@ to-report AI:GeneticAlgorithm [#num-iters #population #crossover-ratio #mutation
 end
 
 ;-------------------------------------------------- metodos-de-seleccion --------------------------------------------------
-to-report AI:Select-elitist [#old-generation]
+to-report AI:Select-elitist [#old-generation];Selección elitista, selecciona 3 de los individuos con mejor fitness de la población
 
     let father1 max-one-of (n-of 3 #old-generation) [fitness] ;Original
     let father2 max-one-of (n-of 3 #old-generation) [fitness] ;Original
@@ -66,80 +68,169 @@ to-report AI:Select-elitist [#old-generation]
   report (list father1 father2)
 end
 
-to-report AI:Select-ruleta [#old-generation]
-  ;The previous selection will have problems when the fitnesses differs very much. For example, if the best chromosome fitness is 90% of all the roulette wheel then the other chromosomes will have very few chances to be selected.
-
-;Rank selection first ranks the population and then every chromosome receives fitness from this ranking. The worst will have fitness 1, second worst 2 etc. and the best will have fitness N (number of chromosomes in population).
-
-  let fitness-total sum [fitness] of #old-generation
-
-    let father1 min-one-of (n-of 3 #old-generation) [fitness / fitness-total]
-    let father2 min-one-of (n-of 3 #old-generation) [fitness / fitness-total]
+to-report AI:Select-natural [#old-generation];En primer lugar calculamos un fitness mínimo, en este caso señalado por la variable "rango", seleccionamos 2 individuos aleatorios de esta nueva población.
+  let fitness-mayor [fitness] of (max-one-of #old-generation [fitness])
+  let fitness-menor [fitness] of (min-one-of #old-generation [fitness])
+  let aux[]
   
-  report (list father1 father2)
+  let rango fitness-menor + ((fitness-mayor - fitness-menor) / 10) 
+  
+  ask #old-generation[
+    if(fitness >= rango)[
+      set aux lput self aux
+    ]
+  ]
+  
+  report (list (one-of aux) (one-of aux))
+  
 end
 
-to-report AI:Select-rango [#old-generation]
+to-report AI:Select-ruleta [#old-generation];Le fijamos una probabilidad a cada individuo segun su contribución a la suma del fitness total, con la extension RND, 
+  let fitness-total sum [fitness] of #old-generation ;seleccionamos dos elementos de la población según esa probablidad
 
-  let rango N-Range
+  ask #old-generation[
+    set prob fitness / fitness-total
+  ]
   
-  let fitness-mayor ( [fitness] of max-one-of #old-generation [fitness])
+  let father1 rnd:weighted-one-of #old-generation [prob]
+  let father2 rnd:weighted-one-of #old-generation [prob]
   
-    let father1 min-one-of (n-of 3 #old-generation) [(rango * fitness / fitness-mayor)]
-    let father2 min-one-of (n-of 3 #old-generation) [(rango * fitness / fitness-mayor)]
+  report list father1 father2
+end
+
+to-report AI:Select-rango [#old-generation];En este caso creamos un ranking en la poblacion, el individuo con mejor fitness sera tendra el rango mas alto, al fin y al cabo una probabilidad ya que se dividen por la suma 
+  let pop count #old-generation ;de todos los naturales desde 1 hasta el número de individuos que haya, segun baje ese fitness ira bajando el ranking de 1 en 1 hasta llegar al elemento que sea 1. 
+                                 ;al final se eligen dos elementos segun esa probabilidad con la extension rnd.
+  ask #old-generation[
+    set rank 0
+  ]
   
-  report (list father1 father2)
+  let i pop 
+  while[i > 0][
+    let maxFit max-one-of (#old-generation with [rank = 0]) [fitness]
+    ask maxFit[
+      set rank i
+    ]
+    set i i - 1
+  ]
+  
+  let sumRank pop * (pop + 1) / 2
+  ask #old-generation[
+    set prob rank / sumRank
+  ]
+  
+  let father1 rnd:weighted-one-of #old-generation [prob]
+  let father2 rnd:weighted-one-of #old-generation [prob]
+  
+  report list father1 father2
 end
 
 ;-------------------------------------------------- metodos-de-cruzamiento --------------------------------------------------
-to-report AI:Crossover-single-point [c1 c2] ;single-point crossover
-  let cut-point 1 + random (length c1 - 1)
-  report list (sentence (sublist c1 0 cut-point)
-                        (sublist c2 cut-point length c2))
-              (sentence (sublist c2 0 cut-point)
-                        (sublist c1 cut-point length c1))
+to-report AI:Crossover-single-point [c1 c2] ;Selecciona un punto aleatorio en la lista de genes de ambos cromosomas, corta ambas listas por ese punto y pega la primera parte de una con la segunda parte de otra y viceversa.
+
+  let n1 random N
+  
+  let p1 sublist c1 0 n1
+  let p2 sublist c1 n1 N
+  
+  let p3 sublist c2 0 n1
+  let p4 sublist c2 n1 N
+  
+  report (list (sentence p1 p4) (sentence p3 p2))
+  
 end
 
-to-report AI:Crossover-two-point [c1 c2] ;two-point crossover
+to-report AI:Crossover-two-point [c1 c2] ;Igual que antes pero por tres puntos aleatorios, corta en tres partes ambas listas y las une intercambiandolas.
+
   let n1 random N
-  let n2 floor ((n1 + N / 2) mod N)
+  let n2 random N
   
   let aux sort (list n1 n2)
   let W1 item 0 aux
   let W2 item 1 aux
   
-  
-  let l5 sublist c1 W2 N
-  let l6 sublist c2 W2 N
+  let l1 sublist c1 0 W1
+  let l2 sublist c2 0 W1 
   
   let l3 sublist c1 W1 W2
   let l4 sublist c2 W1 W2
   
-  let l1 sublist c1 0 W1
-  let l2 sublist c2 0 W1 
+  let l5 sublist c1 W2 N
+  let l6 sublist c2 W2 N
   
-  let children1 (sentence l1 l3 l5)
-  let children2 (sentence l2 l4 l6)
+  let children1 (sentence l1 l4 l5)
+  let children2 (sentence l2 l3 l6)
+ 
+  set prueba (list c1 c2)
+  set prueba2 (list children1 children2)
   
   report (list children1 children2)
   
 end 
 
-to-report AI:Crossover-uniform [c1 c2] 
-  let children1[]
-  let children2[]
+to-report AI:Crossover-uniform [c1 c2];Con este cruzamiento miramos si en las mismas posiciones de ambos cromosomas tenemos elementos distintos, si son distintos los intercambiamos con una probabilidad del 50%.
   let i 0
-  while[i < length c1][
-     let ran random 2
-     let ic1 item i c1
-     let ic2 item i c2
-     if(ic1 != ic2 and ran = 1)[
-       set c1 replace-item i c1 ic2
-       set c2 replace-item i c2 ic1
+  let children1 sublist c1 0 length c1
+  let children2 sublist c2 0 length c2
+  while[i < N][
+     ;let ran random 1
+     let ic1 item i children1
+     let ic2 item i children2
+     if(ic1 != ic2)[
+       set children1 replace-item i children1 ic2
+       set children2 replace-item i children2 ic1
      ]
      set i i + 1
     ]
   report (list children1 children2)
+end
+
+to-report AI:Crossover-uniform-media [c1 c2];Este cruzamiento es igual al anterior pero siempre se intercambian exactamente la mitad de genes que son distintos. Calculamos el numero de genes distintos mediante
+                                            ;la distancia de hamming. NO USAR SI ES POSIBLE QUE LA LISTA DE GENES SEA DE DISTINTO TAMAÑO
+  let numCam floor ((AI:distance c1 c2) / 2)
+  let listaC1 sublist c1 0 N
+  let listaC2 sublist c2 0 N
+  let pos[]
+  
+  foreach c1[
+    i -> if(position i c2 = position i c1)[
+      set pos lput (position i c1) pos 
+    ]
+  ]
+  
+  set pos n-of numCam pos
+  
+  foreach pos[
+    i -> set listaC1 replace-item i listaC1 position i listaC2
+  ]
+  
+  foreach pos[
+    i -> set listaC2 replace-item i listaC2 position i listaC1
+  ]
+  
+  report (list listaC1 listaC2)
+end
+
+to-report AI:Crossover-ordered [c1 c2];Este método de cruzamiento está diseñado para problemas en los que se trabaje con genomas de listas de ordenadas, cogemos una sublista del cromosoma y comprobamos 
+  let n1 random N ;en el otro cromosoma los elementos que faltan en el primero, añadiendolos en el orden en el que se presentan en el segundo cromosoma, igual para obtener el segundo hijo.
+  
+  let sub1 sublist c1 0 n1
+  let sub2 sublist c2 0 n1
+  
+  foreach c2[
+    i -> if(position i sub1 = false)[
+      set sub1 lput i sub1
+    ]
+  ]
+  
+  foreach c1[
+    i -> if(position i sub2 = false)[
+      set sub2 lput i sub2
+    ]
+  ]
+  
+  report (list sub1 sub2)
+  
 end
 
 to-report AI:Crossover-opt2 [c1 c2] ;opt2
@@ -195,47 +286,50 @@ to-report AI:Crossover-opt2 [c1 c2] ;opt2
 end
 
 ;-------------------------------------------------- metodos-de-mutacion --------------------------------------------------
-to AI:mutate-flip  [#mutation-ratio];original
+to AI:mutate-flip  [#mutation-ratio] ;Este es el método de mutación por defecto de la libreria.
   set content map [ ?1 -> ifelse-value (random-float 100.0 < #mutation-ratio) [random N] [?1] ] content
 end
-to AI:mutate-two-flip[#mutation-ratio];two-flip: intercambia dos posiciones aleatorias de la lista
+
+to AI:mutate-gamma[#mutation-ratio] ;Cambia un gen aleatorio del cromosoma por un elemento de una distribución gamma entre 1 y N.
 
   if(random-float 100.0 < #mutation-ratio)[ 
-    let n1 random N 
-    let n2 floor ((n1 + N / 2) mod N)
-    
-    let i1 item n1 content
-    let i2 item n2 content
+    let elem round (random-gamma 0.1 0.9) 
+    let ran random N
+    set content replace-item ran content elem 
+  ]
+  
+end
 
-    set content replace-item n1 content i2
-    set content replace-item n2 content i1
+to AI:mutate-scramble[#mutation-ratio];Segun el mutation-ratio selecciona una sublista de genes y los desordena de manera aleatoria.
+  
+  if(random-float 100.0 < #mutation-ratio)[ 
+    let rango floor (length content * #mutation-ratio) / 10
+    let mitad floor length content / 2
+    let sp floor mitad  - rango / 2
+    let fp floor mitad + rango / 2
+    
+    let p1 sublist content 0 sp  
+    let p2 sublist content fp length content
+    let shuf sublist content sp fp
+    
+    set content (sentence p1 shuffle shuf p2)
   ]
 end
 
-to AI:mutate-scramble[#mutation-ratio]
-  let rango floor (length content * #mutation-ratio) / 10
-  let mitad floor length content / 2
-  let sp floor mitad  - rango / 2
-  let fp floor mitad + rango / 2
+to AI:mutate-inversion[#mutation-ratio];Igual que el anterior desordanaba la lista, este la invierte.
   
-  let p1 sublist content 0 sp  
-  let p2 sublist content fp length content
-  let shuf sublist content sp fp
-
-  set content (sentence p1 shuffle shuf p2)
-end
-
-to AI:mutate-inversion[#mutation-ratio]
-  let rango floor (length content * #mutation-ratio) / 10
-  let mitad floor length content / 2
-  let sp floor mitad  - rango / 2
-  let fp floor mitad + rango / 2
-  
-  let p1 sublist content 0 sp  
-  let p2 sublist content fp length content
-  let rev sublist content sp fp
-  
-  set content (sentence p1 reverse rev p2)
+  if(random-float 100.0 < #mutation-ratio)[ 
+    let rango floor (length content * #mutation-ratio) / 10
+    let mitad floor length content / 2
+    let sp floor mitad  - rango / 2
+    let fp floor mitad + rango / 2
+    
+    let p1 sublist content 0 sp  
+    let p2 sublist content fp length content
+    let rev sublist content sp fp
+    
+    set content (sentence p1 reverse rev p2)
+  ]
 end
 ;-------------------------------------------------------------------------------------------------------------------------
 ; Procedure to create the new generation from the current one.
@@ -270,6 +364,9 @@ to AI:Create-next-generation [#population #crossover-ratio #mutation-ratio]
     if metodo-de-seleccion = "rulette" [
       set fathers AI:Select-ruleta old-generation]
     
+    if metodo-de-seleccion = "natural" [
+      set fathers AI:Select-natural old-generation]
+    
     ;------------------------------------------------------------------------------
     
     let father1 (item 0 fathers)
@@ -284,12 +381,18 @@ to AI:Create-next-generation [#population #crossover-ratio #mutation-ratio]
     if metodo-de-cruzamiento = "uniform" [
      set content-child AI:crossover-uniform ([content] of father1) ([content] of father2)]
     
+    if metodo-de-cruzamiento = "uniform-media" [
+     set content-child AI:crossover-uniform-media ([content] of father1) ([content] of father2)]
+    
     if metodo-de-cruzamiento = "opt2" [
      set content-child AI:crossover-opt2 ([content] of father1) ([content] of father2)]
     
     if metodo-de-cruzamiento = "two-point" [
      set content-child AI:Crossover-two-point ([content] of father1) ([content] of father2)]
     
+    if metodo-de-cruzamiento = "ordered" [
+     set content-child AI:Crossover-ordered ([content] of father1) ([content] of father2)]
+
     ;------------------------------------------------------------------------------
     
     ; From 2 parents we create 2 children
@@ -316,7 +419,7 @@ to AI:Create-next-generation [#population #crossover-ratio #mutation-ratio]
     ;----------------------------metodos-de-mutacion----------------------------
 
     if metodo-de-mutacion = "flip" [AI:mutate-flip #mutation-ratio]
-    if metodo-de-mutacion = "two-flip" [AI:mutate-two-flip #mutation-ratio]    
+    if metodo-de-mutacion = "gamma" [AI:mutate-gamma #mutation-ratio]    
     if metodo-de-mutacion = "scramble" [AI:mutate-scramble #mutation-ratio]
     if metodo-de-mutacion = "inversion" [AI:mutate-inversion #mutation-ratio]
     
