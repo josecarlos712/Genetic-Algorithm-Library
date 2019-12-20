@@ -23,6 +23,7 @@ end
 to AI:Initial-Population [#population]
   create-AI:individuals #population [
     set content n-values N [one-of [0 1]]
+    set posible-values (list 0 1)
     AI:Compute-fitness
     hide-turtle
   ]
@@ -166,7 +167,7 @@ mutation-ratio
 mutation-ratio
 0
 10
-10.0
+2.7
 0.1
 1
 NIL

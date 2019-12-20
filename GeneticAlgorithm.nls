@@ -8,6 +8,7 @@ AI:individuals-own [
   fitness  ; Where the fitness of the individual is stored
   prob
   rank
+  posible-values ;range of values that gene can take (list of two elements)
 ]
 
 globals[iteraciones prueba prueba2 prueba3 prueba4]
@@ -293,7 +294,9 @@ end
 to AI:mutate-gamma[#mutation-ratio] ;Cambia un gen aleatorio del cromosoma por un elemento de una distribución gamma entre 1 y N.
 
   if(random-float 100.0 < #mutation-ratio)[ 
-    let elem round (random-gamma 0.1 0.9) 
+    let elem round (random-gamma (item 0 posible-values + 0.1) (item 1 posible-values - 0.1))
+    print (item 0 posible-values + 0.1)
+    print (item 1 posible-values - 0.1)
     let ran random N
     set content replace-item ran content elem 
   ]
